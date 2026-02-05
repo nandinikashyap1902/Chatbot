@@ -16,16 +16,51 @@ const conversations = {};
 // let Messarr = [{
 //             role: 'system', content: 'you are friendly model who helps person and solve their problems.keep it remember when someone ask you question that you unsure about that question say i do not know this always speak softly always try to give examples.do not give answer more than 200 words'
 //         },]
-app.post('/api/groq', async(req, res) => {
-    try {
-        const { message, userId } = req.body
-        if (!userId) {
-            return res.status(400).json({ error: "userId is required" });
-        }
-        if (!message || !message.trim()) {
-            return res.status(400).json({ error: "Message cannot be empty" });
-        }
-        if (!conversations[userId]) {
+// app.post('/api/groq', async(req, res) => {
+//     try {
+//         const { message, userId } = req.body
+        // if (!userId) {
+        //     return res.status(400).json({ error: "userId is required" });
+        // }
+//         if (!message || !message.trim()) {
+//             return res.status(400).json({ error: "Message cannot be empty" });
+//         }
+        // if (!conversations[userId]) {
+        //     conversations[userId] = [
+        //         {
+        //             role: "system",
+        //             content: "You are a helpful assistant. If you don’t know, say you don’t know."
+        //         }
+        //     ];
+        // }
+        // if (conversations[userId].length > 21) {
+        //     conversations[userId] = [
+        //         conversations[userId][0], // system
+        //         ...conversations[userId].slice(-20)
+        //     ];
+        // }
+        // conversations[userId].push({
+        //     role: "user",
+        //     content: message
+        // });
+//         const response = await client.chat.completions.create({
+//             model: "llama-3.1-8b-instant",
+//             messages: conversations[userId]
+//         })
+//         const result = response.choices[0].message.content
+//         conversations[userId].push({ role: "assistant", content: result })
+//         res.json(
+//             { role: "assistant", content: result })
+//     }
+//     catch (err) {
+//           res.status(500).josn({error:"Ai service unavailable"})
+//       }
+// })
+
+
+app.post("/api/groq/stream", async (req, res) => {
+  const { message, userId } = req.body;
+if (!conversations[userId]) {
             conversations[userId] = [
                 {
                     role: "system",
@@ -43,25 +78,26 @@ app.post('/api/groq', async(req, res) => {
             role: "user",
             content: message
         });
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
 
-       
-        const response = await client.chat.completions.create({
-            model: "llama-3.1-8b-instant",
-            messages: conversations[userId]
-        })
-        const result = response.choices[0].message.content
-        conversations[userId].push({ role: "assistant", content: result })
-        res.json(
-            
-            { role: "assistant", content: result },
-            
-    )
+  const stream = await client.chat.completions.create({
+    model: "llama-3.1-8b-instant",
+    messages: conversations[userId],
+    stream: true
+  });
+
+  for await (const chunk of stream) {
+    const token = chunk.choices[0]?.delta?.content;
+    if (token) {
+      res.write(`${token}\n\n`);
     }
-    catch (err) {
-          res.status(500).josn({error:"Ai service unavailable"})
-      }
-})
+  }
+
+  res.write("[DONE]\n\n");
+  res.end();
+});
 app.listen(5000,() => {
     console.log('server stared')
 })
-

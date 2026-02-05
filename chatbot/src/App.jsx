@@ -1,4 +1,5 @@
 import Chatbot from "./Chatbot"
+import Practice from "./Practice"
 
 
 function App() {
@@ -6,7 +7,8 @@ function App() {
 
   return (
     <>
-      <Chatbot></Chatbot>
+      {/* <Chatbot></Chatbot> */}
+      <Practice></Practice>
     </>
   )
 }
