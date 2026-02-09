@@ -46,11 +46,15 @@ export default function Chatbot() {
   //   setInput("");
   // }
   // };
-const sendMessage = async () => {
+  const sendMessage = async () => {
+  console.log(input)
   const res = await fetch("http://localhost:5000/api/groq/stream", {
     method: "POST",
     body: JSON.stringify({ message: input,userId:getUserId()}),
-    headers: { "Content-Type": "application/json" }
+    headers: {
+  "Content-Type": "application/json"
+}
+
   });
 
   const reader = res.body.getReader();
@@ -98,7 +102,6 @@ const sendMessage = async () => {
           placeholder="Type a message..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-         
         />
        
           <button onClick={sendMessage}  > "Send"</button>

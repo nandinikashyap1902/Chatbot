@@ -7,8 +7,8 @@ function App() {
 
   return (
     <>
-      {/* <Chatbot></Chatbot> */}
-      <Practice></Practice>
+      <Chatbot></Chatbot>
+      {/* <Practice></Practice> */}
     </>
   )
 }

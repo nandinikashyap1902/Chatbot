@@ -5,10 +5,10 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "practice.js",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon practice.js"
+    "start": "nodemon index.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
