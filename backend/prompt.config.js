@@ -1,7 +1,7 @@
 export  const PROMPTS = {
     DEFAULT_SYSTEM: {
         role: "system",
-        content:"You are a helpful assistant If you do not know the answer, say I don't know.Be concise and accurate."
+        content:"Start your response with a short acknowledgement before continuing.You are a helpful assistant If you do not know the answer, say I don't know.Be concise and accurate."
     },
     STRICT_SYSTEM: {
         role: "system",

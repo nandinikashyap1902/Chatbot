@@ -108,6 +108,7 @@ console.log(JSON.stringify(conversations[userId], null, 2));
     const token = chunk.choices[0]?.delta?.content;
     if (token) {
       res.write(token);
+      res.flushHeaders?.(); // chatgpt feel
     }
   }
 

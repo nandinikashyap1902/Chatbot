@@ -14,6 +14,8 @@ const getUserId = () => {
 export default function Chatbot() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [streamingMessage, setStreamingMessage] = useState("");
+const [isStreaming, setIsStreaming] = useState(false);
   // const[isLoading,setIsLoading] = useState()
   //const [isClicked, setIsClicked] = useState(false)
   //const [istyping,setIsTyping] = useState(false)
@@ -47,37 +49,66 @@ export default function Chatbot() {
   // }
   // };
   const sendMessage = async () => {
-  console.log(input)
-  const res = await fetch("http://localhost:5000/api/groq/stream", {
-    method: "POST",
-    body: JSON.stringify({ message: input,userId:getUserId()}),
-    headers: {
-  "Content-Type": "application/json"
-}
+    console.log(input)
+    setIsStreaming(true);
+    setStreamingMessage("");
 
-  });
+    const res = await fetch("http://localhost:5000/api/groq/stream", {
+      method: "POST",
+      body: JSON.stringify({ message: input, userId: getUserId() }),
+      headers: {
+        "Content-Type": "application/json"
+      }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-
-  let assistantText = "";
-  setMessages(prev => [...prev, { role: "assistant", content: "" }]);
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value);
-    if (chunk.includes("[DONE]")) break;
-
-    assistantText += chunk.replace("data: ", "");
-    setMessages(prev => {
-      const copy = [...prev];
-      copy[copy.length - 1].content = assistantText;
-      return copy;
     });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+  
+    let fullText = "";
+    try {
+      while (true) {
+        
+        const { value, done } = await reader.read();
+        if (done) break;
+      
+        const chunk = decoder.decode(value);
+        if (chunk.includes("[DONE]")) break;
+        fullText += chunk;
+         await new Promise(r => setTimeout(r, 15)); //for chatgpt
+        setStreamingMessage(prev => prev + chunk);
+      }
+    } catch (err) {
+      console.error("Streaming error:", err);
+    } finally {
+      if (fullText) {
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: fullText }
+        ]);
+      }
+      setStreamingMessage("");
+      setIsStreaming(false);
+    }
   }
-};
+      //   while (true) {
+      //     const { value, done } = await reader.read();
+      //     if (done) break;
+
+      //     const chunk = decoder.decode(value);
+      //     if (chunk.includes("[DONE]")) break;
+      // setStreamingMessage(prev => prev + chunk);
+      //     // assistantText += chunk.replace("data: ", "");
+      //     setMessages(prev => [
+      //     ...prev,
+      //       { role: "assistant", content: streamingMessage }
+      //     ]);
+      //     }
+  
+   
+
+
 
   return (
     <div className="chat-container">
@@ -93,6 +124,11 @@ export default function Chatbot() {
             </div>
           ))
         }
+        {isStreaming && (
+          <div className="assistant">
+            {streamingMessage}
+            <span className="cursor">▌</span>
+          </div>)}
         {/* {isLoading && <div>AI is typing...</div>} */}
         </div>
 
