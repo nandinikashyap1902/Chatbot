@@ -95,23 +95,30 @@ if (!conversations[userId]) {
             content: message
         });
   
-console.log("FINAL MESSAGES SENT TO GROQ:");
-console.log(JSON.stringify(conversations[userId], null, 2));
+// console.log("FINAL MESSAGES SENT TO GROQ:");
+// console.log(JSON.stringify(conversations[userId], null, 2));
 
   const stream = await client.chat.completions.create({
     model: "llama-3.1-8b-instant",
     messages: conversations[userId],
-    stream: true
+    stream: true,
+    max_tokens:1500
   });
-
+  let isClosed = false;
+req.on("close", () => {
+  isClosed = true;
+});
+  // console.time("generation");
   for await (const chunk of stream) {
+  
+    if (isClosed) break;
     const token = chunk.choices[0]?.delta?.content;
     if (token) {
       res.write(token);
-      res.flushHeaders?.(); // chatgpt feel
+      // res.flushHeaders?.(); // chatgpt feel
     }
   }
-
+//console.timeEnd("generation");
  res.write("[DONE]\n\n");
   res.end();
 });

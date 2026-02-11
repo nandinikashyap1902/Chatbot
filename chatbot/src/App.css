@@ -1,5 +1,5 @@
 .chat-container {
-  width: 350px;
+  /* width: 350px; */
   height: 500px;
   border: 1px solid #ccc;
   display: flex;
@@ -55,5 +55,8 @@
 .chat-footer button {
   margin-left: 8px;
   padding: 8px 12px;
+  cursor: pointer;
+}
+.chat-container .chat-footer .stop:hover{
   cursor: pointer;
 }

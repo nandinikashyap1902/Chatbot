@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState,useRef } from "react";
 import "./App.css";
+
 //import { v4 as uuidv4 } from 'uuid'
 //const userId = uuidv4();
 const getUserId = () => {
@@ -12,6 +13,8 @@ const getUserId = () => {
 };
 
 export default function Chatbot() {
+  const controllerRef = useRef(null);
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [streamingMessage, setStreamingMessage] = useState("");
@@ -49,7 +52,8 @@ const [isStreaming, setIsStreaming] = useState(false);
   // }
   // };
   const sendMessage = async () => {
-    console.log(input)
+    const controller = new AbortController();
+    controllerRef.current = controller
     setIsStreaming(true);
     setStreamingMessage("");
 
@@ -58,8 +62,8 @@ const [isStreaming, setIsStreaming] = useState(false);
       body: JSON.stringify({ message: input, userId: getUserId() }),
       headers: {
         "Content-Type": "application/json"
-      }
-
+      },
+signal:controller.signal
     });
 
     const reader = res.body.getReader();
@@ -76,11 +80,13 @@ const [isStreaming, setIsStreaming] = useState(false);
         const chunk = decoder.decode(value);
         if (chunk.includes("[DONE]")) break;
         fullText += chunk;
-         await new Promise(r => setTimeout(r, 15)); //for chatgpt
+          await new Promise(r => setTimeout(r, 30)); //for chatgpt like feel
         setStreamingMessage(prev => prev + chunk);
       }
     } catch (err) {
+      if (err.name !== "AbortError") {
       console.error("Streaming error:", err);
+    }
     } finally {
       if (fullText) {
         setMessages(prev => [
@@ -90,6 +96,7 @@ const [isStreaming, setIsStreaming] = useState(false);
       }
       setStreamingMessage("");
       setIsStreaming(false);
+      controllerRef.current = null;
     }
   }
       //   while (true) {
@@ -107,6 +114,11 @@ const [isStreaming, setIsStreaming] = useState(false);
       //     }
   
    
+const stopGeneration = () => {
+  if (controllerRef.current) {
+    controllerRef.current.abort();
+  }
+};
 
 
 
@@ -128,8 +140,14 @@ const [isStreaming, setIsStreaming] = useState(false);
           <div className="assistant">
             {streamingMessage}
             <span className="cursor">▌</span>
+             
           </div>)}
         {/* {isLoading && <div>AI is typing...</div>} */}
+        {isStreaming && (
+          <button onClick={stopGeneration}>
+    Stop
+  </button>
+        )}
         </div>
 
       <div className="chat-footer">
@@ -140,7 +158,7 @@ const [isStreaming, setIsStreaming] = useState(false);
           onChange={(e) => setInput(e.target.value)}
         />
        
-          <button onClick={sendMessage}  > "Send"</button>
+          <button onClick={sendMessage}  className="stop"> "Send"</button>
        
       </div>
     </div>
