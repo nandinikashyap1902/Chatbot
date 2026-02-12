@@ -144,7 +144,7 @@ const stopGeneration = () => {
           </div>)}
         {/* {isLoading && <div>AI is typing...</div>} */}
         {isStreaming && (
-          <button onClick={stopGeneration}>
+          <button onClick={stopGeneration}  className="stop">
     Stop
   </button>
         )}
@@ -158,7 +158,7 @@ const stopGeneration = () => {
           onChange={(e) => setInput(e.target.value)}
         />
        
-          <button onClick={sendMessage}  className="stop"> "Send"</button>
+          <button onClick={sendMessage} disabled={isStreaming} > "Send"</button>
        
       </div>
     </div>
