@@ -13,7 +13,9 @@ app.get('/', (req, res) => {
 const conversations = {};
  const client = new Groq({
             apiKey: process.env.GROQ_API_KEY
-        })
+ })
+        const MAX_MESSAGES = 12; // good starting range: 10–15
+
 // let Messarr = [{
 //             role: 'system', content: 'you are friendly model who helps person and solve their problems.keep it remember when someone ask you question that you unsure about that question say i do not know this always speak softly always try to give examples.do not give answer more than 200 words'
 //         },]
@@ -61,7 +63,7 @@ const conversations = {};
 
 app.post("/api/groq/stream", async (req, res) => {
     const { message, userId } = req.body;
-    console.log("Incoming body:", req.body);
+    // console.log("Incoming body:", req.body);
 
     if (!message || typeof message !== "string") {
   res.status(400).json({ error: "Message is required" });
@@ -83,20 +85,30 @@ if (!conversations[userId]) {
       content: PROMPTS.DEFAULT_SYSTEM.content
     }
   ];
-        }
-        if (conversations[userId].length > 21) {
-            conversations[userId] = [
-                conversations[userId][0], // system
-                ...conversations[userId].slice(-20).filter(m => m.role !== "system")
-            ];
-        }
+  }
+  let messages = conversations[userId];
+  const systemMessage = messages.find(m => m.role === "system");
+  const nonSystemMessages = messages.filter(m => m.role !== "system"); //hard message cap right way 
+  if (nonSystemMessages.length > MAX_MESSAGES) {                 //taking system message
+    const recent = nonSystemMessages.slice(-(MAX_MESSAGES - 1));
+    conversations[userId] = systemMessage
+        ? [systemMessage, ...recent]
+        : recent;
+}
+        // if (conversations[userId].length > 21) {
+        //     conversations[userId] = [            //temporary way of taking system message
+        //         conversations[userId][0], // system
+        //         ...conversations[userId].slice(-20).filter(m => m.role !== "system")
+        //     ];
+        // } 
         conversations[userId].push({
             role: "user",
             content: message
         });
   
 // console.log("FINAL MESSAGES SENT TO GROQ:");
-// console.log(JSON.stringify(conversations[userId], null, 2));
+ console.log(JSON.stringify(conversations[userId]));
+console.log("Messages being sent:", messages.length);
 
   const stream = await client.chat.completions.create({
     model: "llama-3.1-8b-instant",
