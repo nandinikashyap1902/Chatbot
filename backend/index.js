@@ -60,11 +60,27 @@ const conversations = {};
 //       }
 // })
 
+function estimateTokens(messages) {
+  const text = messages.map(m => m.content).join(" ");
+  return Math.ceil(text.length / 4); // rough approximation
+}
+function getLastNTurns(messages, nTurns) {
+  console.log('messages',messages)
+  const system = messages.find(m => m.role === "system");
+  const nonSystem = messages.filter(m => m.role !== "system");
+console.log('nonsystem',nonSystem)
+  const turns = [];
+  for (let i = 0; i < nonSystem.length; i += 2) {
+    turns.push(nonSystem.slice(i, i + 2));
+  }
+console.log('turns',turns)
+  const recentTurns = turns.slice(-nTurns).flat();
+console.log('recenttruns', recentTurns )
+  return system ? [system, ...recentTurns] : recentTurns;
+}
 
 app.post("/api/groq/stream", async (req, res) => {
     const { message, userId } = req.body;
-    // console.log("Incoming body:", req.body);
-
     if (!message || typeof message !== "string") {
   res.status(400).json({ error: "Message is required" });
   return;
@@ -73,7 +89,6 @@ if (!userId) {
   res.status(400).json({ error: "userId is required" });
   return;
 }
-
     res.setHeader("Content-Type", "text/plain");
   res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -87,28 +102,48 @@ if (!conversations[userId]) {
   ];
   }
   let messages = conversations[userId];
-  const systemMessage = messages.find(m => m.role === "system");
-  const nonSystemMessages = messages.filter(m => m.role !== "system"); //hard message cap right way 
-  if (nonSystemMessages.length > MAX_MESSAGES) {                 //taking system message
-    const recent = nonSystemMessages.slice(-(MAX_MESSAGES - 1));
-    conversations[userId] = systemMessage
-        ? [systemMessage, ...recent]
-        : recent;
+  // 1️⃣ Keep last 4 turns
+  messages = getLastNTurns(messages, 4);
+  
+// 2️⃣ Enforce token ceiling
+  const MAX_CONTEXT_TOKENS = 6000;
+
+  while (estimateTokens(messages) > MAX_CONTEXT_TOKENS) {
+  // Remove oldest non-system message
+  const system = messages.find(m => m.role === "system");
+  const nonSystem = messages.filter(m => m.role !== "system");
+
+  nonSystem.shift(); // remove oldest
+
+  messages = system ? [system, ...nonSystem] : nonSystem;
 }
-        // if (conversations[userId].length > 21) {
-        //     conversations[userId] = [            //temporary way of taking system message
-        //         conversations[userId][0], // system
-        //         ...conversations[userId].slice(-20).filter(m => m.role !== "system")
-        //     ];
-        // } 
-        conversations[userId].push({
-            role: "user",
-            content: message
-        });
+// Save trimmed result
+conversations[userId] = messages;
+  // 3️⃣ Now push new user message
+conversations[userId].push({
+  role: "user",
+  content: message
+});
+  console.log(
+  `Messages: ${conversations[userId].length}, Estimated Tokens: ${estimateTokens(conversations[userId])}`
+);
+//   const systemMessage = messages.find(m => m.role === "system");
+//   const nonSystemMessages = messages.filter(m => m.role !== "system"); //hard message cap right way 
+//   if (nonSystemMessages.length > MAX_MESSAGES) {                 //taking system message
+//     const recent = nonSystemMessages.slice(-(MAX_MESSAGES - 1));
+//     conversations[userId] = systemMessage
+//         ? [systemMessage, ...recent]
+//         : recent;
+// }
+         
+//         conversations[userId].push({
+//             role: "user",
+//             content: message
+//         });
   
 // console.log("FINAL MESSAGES SENT TO GROQ:");
- console.log(JSON.stringify(conversations[userId]));
-console.log("Messages being sent:", messages.length);
+//  console.log(JSON.stringify(conversations[userId]));
+// console.log("Messages being sent:", messages.length);
 
   const stream = await client.chat.completions.create({
     model: "llama-3.1-8b-instant",
