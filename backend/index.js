@@ -64,18 +64,15 @@ function estimateTokens(messages) {
   const text = messages.map(m => m.content).join(" ");
   return Math.ceil(text.length / 4); // rough approximation
 }
+
 function getLastNTurns(messages, nTurns) {
-  console.log('messages',messages)
   const system = messages.find(m => m.role === "system");
   const nonSystem = messages.filter(m => m.role !== "system");
-console.log('nonsystem',nonSystem)
   const turns = [];
   for (let i = 0; i < nonSystem.length; i += 2) {
     turns.push(nonSystem.slice(i, i + 2));
   }
-console.log('turns',turns)
   const recentTurns = turns.slice(-nTurns).flat();
-console.log('recenttruns', recentTurns )
   return system ? [system, ...recentTurns] : recentTurns;
 }
 
@@ -97,7 +94,7 @@ if (!conversations[userId]) {
   conversations[userId] = [
     {
       role: "system",
-      content: PROMPTS.DEFAULT_SYSTEM.content
+      content: PROMPTS.TECHNICAL_SYSTEM.content
     }
   ];
   }
@@ -109,6 +106,7 @@ if (!conversations[userId]) {
   const MAX_CONTEXT_TOKENS = 6000;
 
   while (estimateTokens(messages) > MAX_CONTEXT_TOKENS) {
+   
   // Remove oldest non-system message
   const system = messages.find(m => m.role === "system");
   const nonSystem = messages.filter(m => m.role !== "system");
