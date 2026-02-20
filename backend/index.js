@@ -15,7 +15,7 @@ const conversations = {};
             apiKey: process.env.GROQ_API_KEY
  })
         const MAX_MESSAGES = 12; // good starting range: 10–15
-
+import buildPrompt from './promptBuilder.js'
 // let Messarr = [{
 //             role: 'system', content: 'you are friendly model who helps person and solve their problems.keep it remember when someone ask you question that you unsure about that question say i do not know this always speak softly always try to give examples.do not give answer more than 200 words'
 //         },]
@@ -89,12 +89,22 @@ if (!userId) {
     res.setHeader("Content-Type", "text/plain");
   res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    const prompt = buildPrompt({
+  role: "You are a senior backend engineer. Be concise.",
+  task: "Explain OAuth to a junior developer.",
+  format: `
+1. What it is
+2. Why it exists
+3. Basic flow
+Keep under 200 words.
+`
+});
     
 if (!conversations[userId]) {
   conversations[userId] = [
     {
       role: "system",
-      content: PROMPTS.TECHNICAL_SYSTEM.content
+      content: prompt
     }
   ];
   }
