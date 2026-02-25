@@ -16,6 +16,34 @@ const conversations = {};
  })
         const MAX_MESSAGES = 12; // good starting range: 10–15
 import buildPrompt from './promptBuilder.js'
+const { getEmbedding } = require("./geminiEmbedding");
+const { cosineSimilarity } = require("./similarity");
+let docEmbeddings = [];
+
+async function initializeEmbeddings() {
+  for (let doc of documents) {
+    const embedding = await getEmbedding(doc);
+
+    docEmbeddings.push({
+      text: doc,
+      embedding
+    });
+  }
+
+  console.log("Gemini document embeddings initialized");
+}
+async function retrieveRelevantDocs(query) {
+  const queryEmbedding = await getEmbedding(query);
+
+  const scored = docEmbeddings.map(doc => ({
+    text: doc.text,
+    score: cosineSimilarity(queryEmbedding, doc.embedding)
+  }));
+
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, 2);
+}
 // let Messarr = [{
 //             role: 'system', content: 'you are friendly model who helps person and solve their problems.keep it remember when someone ask you question that you unsure about that question say i do not know this always speak softly always try to give examples.do not give answer more than 200 words'
 //         },]
@@ -59,7 +87,12 @@ import buildPrompt from './promptBuilder.js'
 //           res.status(500).josn({error:"Ai service unavailable"})
 //       }
 // })
-
+const documents = [
+  "OAuth is an authorization framework used for delegated access.",
+  "JWT is a compact token format for secure data transmission.",
+  "Node.js runs JavaScript on the server using the V8 engine.",
+  "Embeddings convert text into numerical vectors."
+];
 function estimateTokens(messages) {
   const text = messages.map(m => m.content).join(" ");
   return Math.ceil(text.length / 4); // rough approximation
@@ -89,22 +122,22 @@ if (!userId) {
     res.setHeader("Content-Type", "text/plain");
   res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-    const prompt = buildPrompt({
-  role: "You are a senior backend engineer. Be concise.",
-  task: "Explain OAuth to a junior developer.",
-  format: `
-1. What it is
-2. Why it exists
-3. Basic flow
-Keep under 200 words.
-`
-});
+//     const prompt = buildPrompt({
+//   role: "You are a senior backend engineer. Be concise.",
+//   task: "Explain OAuth to a junior developer.",
+//   format: `
+// 1. What it is
+// 2. Why it exists
+// 3. Basic flow
+// Keep under 200 words.
+// `
+// });
     
 if (!conversations[userId]) {
   conversations[userId] = [
     {
       role: "system",
-      content: prompt
+      content: PROMPTS.TECHNICAL_SYSTEM.content
     }
   ];
   }
@@ -157,7 +190,8 @@ conversations[userId].push({
     model: "llama-3.1-8b-instant",
     messages: conversations[userId],
     stream: true,
-    max_tokens:1500
+    max_tokens:1500,
+    temperature:1.2
   });
   let isClosed = false;
 req.on("close", () => {
