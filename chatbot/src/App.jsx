@@ -1,16 +1,7 @@
-import Chatbot from "./Chatbot"
-import Practice from "./Practice"
-
+import Chat from "./components/Chat"
 
 function App() {
-  
-
-  return (
-    <>
-      <Chatbot></Chatbot>
-      {/* <Practice></Practice> */}
-    </>
-  )
+  return <Chat />
 }
 
 export default App

@@ -1,0 +1,31 @@
+services:
+  # ---- Backend API ----
+  backend:
+    build: ./backend
+    container_name: rag-backend
+    ports:
+      - "6001:6001"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - backend-uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6001/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---- Frontend (nginx) ----
+  frontend:
+    build: ./chatbot
+    container_name: rag-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend-uploads:
