@@ -152,7 +152,6 @@ ${cappedContext}
 Question:
 ${message}`;
 }
-
 // Cleanup stale conversations (runs every 30 min)
 setInterval(() => {
     const now = Date.now();
