@@ -43,7 +43,7 @@ const client = new Groq({
 const MAX_CONTEXT_TOKENS = 6000;   // max tokens sent to Groq
 const MAX_TURNS = 4;               // keep last N conversation turns
 const MAX_RAG_CONTEXT_CHARS = 3000; // cap RAG context size
-const RELEVANCE_THRESHOLD = 0.35;  // min Pinecone score to use RAG context
+const RELEVANCE_THRESHOLD = 0.55;  // min Pinecone score to use RAG context
 const CONVERSATION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // Rough token estimation (~4 chars per token)
@@ -91,7 +91,12 @@ function ensureConversation(userId) {
         conversations[userId] = [
             {
                 role: 'system',
-                content: 'You are a friendly, helpful AI assistant. Answer all questions naturally and directly. Be concise, accurate, and conversational. Never mention "context", "documents", "uploaded files", or "provided information" in your responses — just answer as if you naturally know the information.'
+                content: `You are a friendly, helpful AI assistant. Rules:
+1. For greetings (hi, hello, hey), respond with a short friendly greeting.
+2. Answer all questions directly and naturally.
+3. NEVER say things like "based on the context", "from the provided documents", "reference information suggests", or anything similar.
+4. Just answer as if you naturally know the information.
+5. Be concise and conversational.`
             }
         ];
     }
@@ -129,6 +134,12 @@ function capContext(contextText, maxChars = MAX_RAG_CONTEXT_CHARS) {
 
 // Build the final prompt — use RAG only if docs are relevant
 function buildRagPrompt(message, relevantDocs) {
+    // Skip RAG for very short messages (greetings, single words)
+    if (message.trim().length < 10) {
+        console.log(`[RAG] Short message (${message.trim().length} chars) — skipping RAG`);
+        return message;
+    }
+
     // Filter to only docs above the relevance threshold
     const goodDocs = relevantDocs.filter(d => d.score >= RELEVANCE_THRESHOLD);
 
@@ -139,13 +150,10 @@ function buildRagPrompt(message, relevantDocs) {
     }
 
     console.log(`[RAG] Using ${goodDocs.length} relevant docs (best score: ${goodDocs[0].score.toFixed(3)})`);
-    const context = goodDocs.map(d => `[${d.source}] ${d.text}`).join('\n');
+    const context = goodDocs.map(d => d.text).join('\n');
     const cappedContext = capContext(context);
 
-    return `Reference information:
-${cappedContext}
-
-${message}`;
+    return `${cappedContext}\n\n${message}`;
 }
 // Cleanup stale conversations (runs every 30 min)
 setInterval(() => {
