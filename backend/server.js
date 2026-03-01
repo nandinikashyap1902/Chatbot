@@ -91,7 +91,7 @@ function ensureConversation(userId) {
         conversations[userId] = [
             {
                 role: 'system',
-                content: 'You are a helpful, knowledgeable assistant. When relevant context from uploaded documents is provided, use it to answer. For general questions, answer using your own knowledge. Be concise, accurate, and helpful.'
+                content: 'You are a friendly, helpful AI assistant. Answer all questions naturally and directly. Be concise, accurate, and conversational. Never mention "context", "documents", "uploaded files", or "provided information" in your responses — just answer as if you naturally know the information.'
             }
         ];
     }
@@ -142,14 +142,9 @@ function buildRagPrompt(message, relevantDocs) {
     const context = goodDocs.map(d => `[${d.source}] ${d.text}`).join('\n');
     const cappedContext = capContext(context);
 
-    return `Use the following context from uploaded documents to help answer the question. If the context is helpful, use it. If not, answer from your own knowledge.
-
-Context:
----
+    return `Reference information:
 ${cappedContext}
----
 
-Question:
 ${message}`;
 }
 // Cleanup stale conversations (runs every 30 min)
