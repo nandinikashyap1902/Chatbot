@@ -76,7 +76,7 @@ export default function Chat() {
     setIsUploading(true);
     setMessages(prev => [...prev, {
       role: "user",
-      content: `${icon} Uploading: ${file.name}`
+      content: `${icon} ${file.name}`
     }]);
 
     try {
@@ -94,7 +94,9 @@ export default function Chat() {
         setUploadedSources(prev => [...prev, { name: file.name, type: isImage ? 'image' : 'file', chunks: data.chunks }]);
         setMessages(prev => [...prev, {
           role: "assistant",
-          content: `✅ ${file.name} processed successfully!\n${data.chunks} chunks indexed — you can now ask questions about this ${isImage ? 'image' : 'document'}.`
+          content: isImage
+            ? `Got it! You can now ask me anything about this image.`
+            : `Got it! You can now ask me anything about "${file.name}".`
         }]);
       } else {
         setMessages(prev => [...prev, {
@@ -134,7 +136,7 @@ export default function Chat() {
 
     setMessages(prev => [...prev, {
       role: "user",
-      content: `🌐 Indexing: ${url}`
+      content: `🌐 ${url}`
     }]);
 
     try {
@@ -151,7 +153,7 @@ export default function Chat() {
         setUploadedSources(prev => [...prev, { name: displayName, type: 'website', chunks: data.chunks }]);
         setMessages(prev => [...prev, {
           role: "assistant",
-          content: `✅ Website indexed — ${data.chunks} chunks stored.\nYou can now ask questions about this page.`
+          content: `Got it! You can now ask me anything about this website.`
         }]);
       } else {
         setMessages(prev => [...prev, {
