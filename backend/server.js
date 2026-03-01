@@ -13,7 +13,11 @@ import { getEmbedding } from './services/embedding.js'
 import * as cheerio from 'cheerio'
 
 const app = express()
-app.use(cors())
+app.use(cors({
+    origin: true,
+    methods: ['GET', 'POST'],
+    credentials: true
+}))
 app.use(express.json())
 
 // --- Multer setup for file uploads (now includes images) ---
@@ -572,46 +576,58 @@ app.post('/api/groq/stream', async (req, res) => {
         return;
     }
 
-    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
-    // RAG retrieval
-    const relevantDocs = await retrieveRelevantDocs(message);
-    const finalPrompt = buildRagPrompt(message, relevantDocs);
+    try {
+        // RAG retrieval
+        const relevantDocs = await retrieveRelevantDocs(message);
+        const finalPrompt = buildRagPrompt(message, relevantDocs);
 
-    // Build token-optimized messages
-    const optimizedMessages = buildOptimizedMessages(userId, finalPrompt);
+        // Build token-optimized messages
+        const optimizedMessages = buildOptimizedMessages(userId, finalPrompt);
 
-    const stream = await client.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: optimizedMessages,
-        stream: true,
-        max_tokens: 1500,
-        temperature: 1.2
-    });
+        const stream = await client.chat.completions.create({
+            model: "llama-3.1-8b-instant",
+            messages: optimizedMessages,
+            stream: true,
+            max_tokens: 1500,
+            temperature: 0.7
+        });
 
-    let fullResponse = "";
-    let isClosed = false;
-    req.on("close", () => {
-        isClosed = true;
-    });
+        let fullResponse = "";
+        let isClosed = false;
+        req.on("close", () => {
+            isClosed = true;
+        });
 
-    for await (const chunk of stream) {
-        if (isClosed) break;
-        const token = chunk.choices[0]?.delta?.content;
-        if (token) {
-            res.write(token);
-            fullResponse += token;
+        for await (const chunk of stream) {
+            if (isClosed) break;
+            const token = chunk.choices[0]?.delta?.content;
+            if (token) {
+                res.write(token);
+                fullResponse += token;
+            }
+        }
+
+        // Store only the raw user message
+        ensureConversation(userId);
+        conversations[userId].push({ role: "user", content: message });
+        conversations[userId].push({ role: "assistant", content: fullResponse });
+
+        res.write("[DONE]");
+        res.end();
+    } catch (err) {
+        console.error("Streaming error:", err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: "AI service unavailable" });
+        } else {
+            res.write("\n[ERROR]");
+            res.end();
         }
     }
-
-    // Store only the raw user message (not the bloated RAG context)
-    conversations[userId].push({ role: "user", content: message });
-    conversations[userId].push({ role: "assistant", content: fullResponse });
-
-    res.write("[DONE]\n\n");
-    res.end();
 })
 
 // --- Initialize and start ---

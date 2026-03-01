@@ -191,6 +191,11 @@ export default function Chat() {
         signal: controller.signal
       });
 
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error: ${res.status}`);
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
@@ -198,13 +203,26 @@ export default function Chat() {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        if (chunk.includes("[DONE]")) break;
-        fullText += chunk;
-        setStreamingMessage(prev => prev + chunk);
+        let chunk = decoder.decode(value, { stream: true });
+
+        // Strip end markers
+        if (chunk.includes("[DONE]")) {
+          chunk = chunk.replace("[DONE]", "");
+        }
+        if (chunk.includes("[ERROR]")) {
+          chunk = chunk.replace("[ERROR]", "");
+          break;
+        }
+
+        if (chunk) {
+          fullText += chunk;
+          setStreamingMessage(prev => prev + chunk);
+        }
       }
 
-      setMessages(prev => [...prev, { role: "assistant", content: fullText }]);
+      if (fullText.trim()) {
+        setMessages(prev => [...prev, { role: "assistant", content: fullText }]);
+      }
     } catch (err) {
       if (err.name !== "AbortError") {
         console.error("Streaming error:", err);
