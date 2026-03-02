@@ -317,7 +317,6 @@ export default function Chat() {
               </div>
             </div>
           )}
-
           {messages.map((msg, i) => (
             <div key={i} className={`message-wrapper ${msg.role}`}>
               <div className="avatar">
