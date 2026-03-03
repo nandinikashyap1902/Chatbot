@@ -205,50 +205,6 @@ async function initPinecone() {
     console.log(`Pinecone index "${INDEX_NAME}" connected`);
 }
 
-// --- Seed default documents ---
-const DEFAULT_DOCUMENTS = [
-    "OAuth is an authorization framework used for delegated access.",
-    "JWT is a compact token format for secure data transmission.",
-    "Node.js runs JavaScript on the server using the V8 engine.",
-    "Embeddings convert text into numerical vectors."
-];
-
-async function seedDefaultDocs() {
-    try {
-        const stats = await pineconeIndex.describeIndexStats();
-        if (stats.totalRecordCount && stats.totalRecordCount > 0) {
-            console.log(`Index already has ${stats.totalRecordCount} vectors, skipping seed`);
-            return;
-        }
-
-        console.log(`Seeding ${DEFAULT_DOCUMENTS.length} default documents...`);
-        for (let i = 0; i < DEFAULT_DOCUMENTS.length; i++) {
-            try {
-                const embedding = await getEmbedding(DEFAULT_DOCUMENTS[i]);
-                if (!embedding || !Array.isArray(embedding) || embedding.length === 0) continue;
-                const values = Array.from(embedding, Number);
-
-                await pineconeIndex.upsert({
-                    records: [{
-                        id: `default-${i}`,
-                        values,
-                        metadata: {
-                            text: DEFAULT_DOCUMENTS[i],
-                            source: 'default',
-                            filename: 'built-in'
-                        }
-                    }]
-                });
-                console.log(`Seeded doc ${i}`);
-            } catch (docErr) {
-                console.warn(`Failed to seed doc ${i}:`, docErr.message);
-            }
-        }
-        console.log('Default documents seeding complete');
-    } catch (err) {
-        console.warn('Seeding failed (non-fatal):', err.message);
-    }
-}
 
 // --- Text extraction from files ---
 async function extractText(filePath, originalName) {
@@ -634,7 +590,6 @@ app.post('/api/groq/stream', async (req, res) => {
 async function start() {
     try {
         await initPinecone();
-        await seedDefaultDocs();
         const PORT = process.env.PORT || 6001;
         app.listen(PORT, () => {
             console.log(`RAG server started on port ${PORT}`);
