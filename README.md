@@ -2,7 +2,10 @@
 
 A full-stack AI chatbot that lets you upload documents, images, and websites — then ask questions about them in natural language. Powered by **Groq** (ultra-fast LLM inference), **Pinecone** (vector search), and **Google Gemini** (embeddings).
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-chatbotgroq1.netlify.app-brightgreen?logo=netlify)](https://chatbotgroq1.netlify.app/)
 ![Tech Stack](https://img.shields.io/badge/React-19-61DAFB?logo=react) ![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=nodedotjs) ![Groq](https://img.shields.io/badge/Groq-LLaMA_3.1-orange) ![Pinecone](https://img.shields.io/badge/Pinecone-Vector_DB-blue) ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)
+
+🔗 **Live:** [https://chatbotgroq1.netlify.app/](https://chatbotgroq1.netlify.app/)
 
 ---
 
