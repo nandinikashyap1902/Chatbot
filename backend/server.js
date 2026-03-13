@@ -16,6 +16,7 @@ import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf'
 import { CSVLoader } from '@langchain/community/document_loaders/fs/csv'
 import { CheerioWebBaseLoader } from '@langchain/community/document_loaders/web/cheerio'
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages'
+import { Document } from '@langchain/core/documents'
 import { InMemoryChatMessageHistory } from '@langchain/core/chat_history'
 
 // ── Groq Vision (images) still needs manual API call ──────────
@@ -135,9 +136,11 @@ async function extractTextFromImage(filePath, ext) {
 // ── Helper: embed and store LangChain Documents in Pinecone ───
 // Replaces: embedAndUpsert()
 async function embedAndStore(docs, sourceName, sourceType) {
-    // Add metadata to each doc
-    const docsWithMeta = docs.map((doc, i) => ({
-        ...doc,
+    if (!docs || docs.length === 0) return 0;
+
+    // Add metadata to each doc, ensuring they are Document instances
+    const docsWithMeta = docs.map((doc, i) => new Document({
+        pageContent: doc.pageContent || doc.text || '',
         metadata: { ...doc.metadata, source: sourceType, filename: sourceName, chunkIndex: i }
     }))
     // LangChain handles embedding + upserting in one call
@@ -193,12 +196,12 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         } else if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
             // Images still use Groq Vision (no LangChain loader for base64)
             const text = await extractTextFromImage(filePath, ext)
-            docs = [{ pageContent: text, metadata: { source: filePath } }]
+            docs = [new Document({ pageContent: text, metadata: { source: filePath } })]
 
         } else if (['.txt', '.md'].includes(ext)) {
             // Plain text — read and wrap in Document format
             const text = fs.readFileSync(filePath, 'utf-8')
-            docs = [{ pageContent: text, metadata: { source: originalname } }]
+            docs = [new Document({ pageContent: text, metadata: { source: originalname } })]
 
         } else if (ext === '.csv') {
             // LangChain CSVLoader — each row becomes a Document
@@ -215,6 +218,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         // Replaces: chunkText() — smarter, sentence-aware splitting
         const chunks = await splitter.splitDocuments(docs)
         console.log(`Split into ${chunks.length} chunks`)
+
+        if (chunks.length === 0) {
+            try { fs.unlinkSync(filePath) } catch (_) { }
+            return res.status(400).json({ error: 'No extractable text chunks found in the file' })
+        }
 
         // ── Store in Pinecone via LangChain ─────────────────────
         const count = await embedAndStore(chunks, originalname, 'file')
@@ -250,6 +258,11 @@ app.post('/api/upload-url', async (req, res) => {
         }
 
         const chunks = await splitter.splitDocuments(docs)
+        
+        if (chunks.length === 0) {
+            return res.status(400).json({ error: 'No extractable text found at this URL after filtering' })
+        }
+        
         const count = await embedAndStore(chunks, url, 'website')
 
         console.log(`Indexed ${count} chunks from "${url}"`)
