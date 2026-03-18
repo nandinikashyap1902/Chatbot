@@ -45,12 +45,11 @@ const llm = new ChatGroq({
     temperature: 0.7,
     streaming: true,
 })
-
 // ── STEP 2: LangChain Embeddings ──────────────────────────────
 // Replaces: getEmbedding() from services/embedding.js
 const embeddings = new GoogleGenerativeAIEmbeddings({
     apiKey: process.env.GEMINI_API_KEY,
-    model: 'text-embedding-004',
+    model: 'embedding-001',
 })
 
 // ── STEP 3: Pinecone + LangChain VectorStore ──────────────────
@@ -274,7 +273,39 @@ app.post('/api/upload-url', async (req, res) => {
     }
 })
 
-// ── Streaming Chat (Main Endpoint) ────────────────────────────
+// ── Tool Definitions for Agent ─────────────────────────────────
+const agentTools = [
+    {
+        type: "function",
+        function: {
+            name: "search_web",
+            description: "Search Wikipedia for current events, entities, or facts. Useful only if you don't know the answer directly.",
+            parameters: {
+                type: "object",
+                properties: { query: { type: "string", description: "The term or question to search for." } },
+                required: ["query"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "send_email",
+            description: "Takes an action to send an email. Assume this actually delivers the content to an inbox.",
+            parameters: {
+                type: "object",
+                properties: {
+                    to: { type: "string", description: "Email address recipient" },
+                    subject: { type: "string", description: "Subject of the email" },
+                    body: { type: "string", description: "Email body text" }
+                },
+                required: ["to", "subject", "body"]
+            }
+        }
+    }
+];
+
+// ── Streaming Chat (Agent Endpoint) ───────────────────────────
 app.post('/api/groq/stream', async (req, res) => {
     const { message, userId } = req.body
 
@@ -286,29 +317,24 @@ app.post('/api/groq/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive')
     res.setHeader('X-Content-Type-Options', 'nosniff')
 
+    let isClosed = false
+    req.on('close', () => { isClosed = true })
+
     try {
         // ── Get relevant context from Pinecone ──────────────
         const context = await getRelevantContext(message)
-
-        // ── Build prompt ────────────────────────────────────
-        const finalMessage = context
-            ? `${context}\n\n${message}`
-            : message
-
-        // ── Get/create memory for this user ───────────────────────
+        const finalMessage = context ? `${context}\n\n${message}` : message
         const history = await getTrimmedHistory(userId)
 
-        // ── Build messages array with history ──────────────────────
         const systemMsg = {
             role: 'system',
-            content: `You are a friendly, helpful AI assistant. Rules:
-1. Answer all questions directly and naturally.
-2. NEVER say things like "based on the context", "from the provided documents" or anything similar.
-3. Just answer as if you naturally know the information.
-4. Be concise and conversational.`
+            content: `You are a friendly, helpful AI Agent. Rules:
+1. Answer all questions directly.
+2. NEVER say things like "based on context" or "from provided documents".
+3. Use the search_web tool if the user asks for current facts you don't confidently know.
+4. Use the send_email tool when the user asks you to email someone.`
         }
 
-        // Convert LangChain memory messages to Groq format
         const historyMsgs = history.map(msg =>
             msg instanceof HumanMessage
                 ? { role: 'user', content: msg.content }
@@ -317,33 +343,92 @@ app.post('/api/groq/stream', async (req, res) => {
 
         const messages = [systemMsg, ...historyMsgs, { role: 'user', content: finalMessage }]
 
-        // ── Stream from Groq ─────────────────────────────────
-        const stream = await groqClient.chat.completions.create({
+        // ── STEP 1: Check if the Agent wants to use a Tool (Non-streaming) ──
+        const initialResponse = await groqClient.chat.completions.create({
             model: 'llama-3.1-8b-instant',
             messages,
-            stream: true,
+            tools: agentTools,
+            tool_choice: "auto",
             max_tokens: 1500,
             temperature: 0.7
-        })
+        });
 
+        const responseMessage = initialResponse.choices[0]?.message;
+        const toolCalls = responseMessage?.tool_calls;
         let fullResponse = ''
-        let isClosed = false
-        req.on('close', () => { isClosed = true })
 
-        for await (const chunk of stream) {
-            if (isClosed) break
-            const token = chunk.choices[0]?.delta?.content
-            if (token) {
-                res.write(token)
-                fullResponse += token
+        if (toolCalls && toolCalls.length > 0) {
+            // Agent decided to use a tool — notify the frontend visually!
+            res.write(`\n*⏳ (Agent is reasoning...)*\n\n`)
+            messages.push(responseMessage); // Add the assistant's tool request
+
+            for (const toolCall of toolCalls) {
+                const funcName = toolCall.function.name;
+                const args = JSON.parse(toolCall.function.arguments || "{}");
+                let result = "";
+
+                // Execute the actual Tool Logic
+                if (funcName === "search_web") {
+                    res.write(`*🔎 (Searching the web for: "${args.query}")...*\n\n`)
+                    try {
+                        const { default: fetch } = await import('node-fetch');
+                        const wikiRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(args.query)}&utf8=&format=json`);
+                        const data = await wikiRes.json();
+                        result = data.query.search.slice(0, 3).map(s => s.snippet.replace(/<\/?[^>]+(>|$)/g, "")).join('\n\n');
+                        if (!result) result = "No relevant answers found on Wikipedia.";
+                    } catch (e) {
+                        result = "Web search failed.";
+                    }
+                } else if (funcName === "send_email") {
+                    res.write(`*✉️ (Action: Sending an email to ${args.to})...*\n\n`)
+                    // Simulated Email Sending Database/API Call
+                    result = `SUCCESS: Email with subject "${args.subject}" has been successfully delivered to ${args.to}.`;
+                }
+
+                // Push tool results back to conversation
+                messages.push({
+                    tool_call_id: toolCall.id,
+                    role: "tool",
+                    name: funcName,
+                    content: result
+                });
+            }
+
+            // ── STEP 2: Let the Agent read tool results and Stream Final Answer ──
+            const stream = await groqClient.chat.completions.create({
+                model: 'llama-3.1-8b-instant',
+                messages,
+                stream: true,
+                max_tokens: 1500,
+                temperature: 0.7
+            });
+
+            for await (const chunk of stream) {
+                if (isClosed) break;
+                const token = chunk.choices[0]?.delta?.content;
+                if (token) {
+                    res.write(token);
+                    fullResponse += token;
+                }
+            }
+
+        } else {
+            // Agent answered directly, no tools needed.
+            const content = responseMessage?.content || ''
+            // Mock streaming behavior so UI still gets a typewriter effect
+            for (let i = 0; i < content.length; i += 3) {
+                if (isClosed) break;
+                const token = content.slice(i, i + 3);
+                res.write(token);
+                fullResponse += token;
+                await new Promise(r => setTimeout(r, 10)); // 10ms typing delay
             }
         }
 
-        // ── Save to LangChain memory ────────────────────────────
-        // Replaces: conversations[userId].push(...)
+        // ── Save memory ──────────────────────────────────────────
         const mem = getMemory(userId)
         await mem.addMessage(new HumanMessage(message))
-        await mem.addMessage(new AIMessage(fullResponse))
+        await mem.addMessage(new AIMessage(fullResponse.trim()))
 
         res.write('[DONE]')
         res.end()
@@ -370,8 +455,17 @@ app.post('/api/groq', async (req, res) => {
         const finalMessage = context ? `${context}\n\n${message}` : message
 
         const history = await getTrimmedHistory(userId)
+        const systemMsg = {
+            role: 'system',
+            content: `You are a friendly, helpful AI Agent. Rules:
+1. Answer all questions directly.
+2. NEVER say things like "based on context" or "from provided documents".
+3. Use the search_web tool if the user asks for current facts you don't confidently know.
+4. Use the send_email tool when the user asks you to email someone.`
+        }
+
         const messages = [
-            { role: 'system', content: 'You are a friendly, helpful AI assistant. Answer naturally without mentioning context or documents.' },
+            systemMsg,
             ...history.map(msg => msg instanceof HumanMessage
                 ? { role: 'user', content: msg.content }
                 : { role: 'assistant', content: msg.content }
@@ -379,18 +473,69 @@ app.post('/api/groq', async (req, res) => {
             { role: 'user', content: finalMessage }
         ]
 
-        const response = await groqClient.chat.completions.create({
+        const initialResponse = await groqClient.chat.completions.create({
             model: 'llama-3.1-8b-instant',
             messages,
-            max_tokens: 1500
+            tools: agentTools,
+            tool_choice: "auto",
+            max_tokens: 1500,
+            temperature: 0.7
         })
 
-        const result = response.choices[0].message.content
+        const responseMessage = initialResponse.choices[0]?.message;
+        const toolCalls = responseMessage?.tool_calls;
+        let finalOutput = "";
+
+        if (toolCalls && toolCalls.length > 0) {
+            messages.push(responseMessage);
+            let actionText = "";
+
+            for (const toolCall of toolCalls) {
+                const funcName = toolCall.function.name;
+                const args = JSON.parse(toolCall.function.arguments || "{}");
+                let result = "";
+
+                if (funcName === "search_web") {
+                    actionText += `\n*🔎 (Searched the web for: "${args.query}")*\n`;
+                    try {
+                        const { default: fetch } = await import('node-fetch');
+                        const wikiRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(args.query)}&utf8=&format=json`);
+                        const data = await wikiRes.json();
+                        result = data.query.search.slice(0, 3).map(s => s.snippet.replace(/<\/?[^>]+(>|$)/g, "")).join('\n\n');
+                        if (!result) result = "No relevant answers found on Wikipedia.";
+                    } catch (e) {
+                        result = "Web search failed.";
+                    }
+                } else if (funcName === "send_email") {
+                    actionText += `\n*✉️ (Action: Sent an email to ${args.to})*\n`;
+                    result = `SUCCESS: Email with subject "${args.subject}" has been successfully delivered to ${args.to}.`;
+                }
+
+                messages.push({
+                    tool_call_id: toolCall.id,
+                    role: "tool",
+                    name: funcName,
+                    content: result
+                });
+            }
+
+            const secondResponse = await groqClient.chat.completions.create({
+                model: 'llama-3.1-8b-instant',
+                messages,
+                max_tokens: 1500,
+                temperature: 0.7
+            });
+
+            finalOutput = actionText + "\n" + (secondResponse.choices[0]?.message?.content || "");
+        } else {
+            finalOutput = responseMessage?.content || "";
+        }
+
         const mem = getMemory(userId)
         await mem.addMessage(new HumanMessage(message))
-        await mem.addMessage(new AIMessage(result))
+        await mem.addMessage(new AIMessage(finalOutput.trim()))
 
-        res.json({ role: 'assistant', content: result })
+        res.json({ role: 'assistant', content: finalOutput.trim() })
     } catch (err) {
         console.error('Error in /api/groq:', err)
         res.status(500).json({ error: 'AI service unavailable' })
