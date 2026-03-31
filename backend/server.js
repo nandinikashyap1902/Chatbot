@@ -19,7 +19,6 @@ import { Document } from '@langchain/core/documents'
 import { InMemoryChatMessageHistory } from '@langchain/core/chat_history'
 // ── Groq Vision (images) still needs manual API call ──────────
 const require = createRequire(import.meta.url)
-
 const app = express()
 app.use(cors({ origin: true, methods: ['GET', 'POST'], credentials: true }))
 app.use(express.json())
