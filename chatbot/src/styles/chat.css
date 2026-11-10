@@ -392,6 +392,60 @@ body {
   max-width: 75%;
 }
 
+.message-content > :first-child {
+  margin-top: 0;
+}
+
+.message-content > :last-child {
+  margin-bottom: 0;
+}
+
+.message-content p,
+.message-content ul,
+.message-content ol,
+.message-content blockquote,
+.message-content table,
+.message-content pre {
+  margin: 0.65em 0;
+}
+
+.message-content ul,
+.message-content ol {
+  padding-left: 1.4em;
+}
+
+.message-content table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.message-content th,
+.message-content td {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.message-content th {
+  background: var(--accent-soft);
+}
+
+.message-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.message-content pre code {
+  padding: 0;
+  background: transparent;
+}
+
 .message-wrapper.assistant .message-content {
   background: var(--assistant-bubble);
   border: 1px solid var(--assistant-border);

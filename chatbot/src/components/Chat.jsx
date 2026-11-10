@@ -1,5 +1,14 @@
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import "../styles/chat.css";
+import { readChatStream } from "../utils/chatStream";
+
+const renderAssistantMarkdown = (content) => (
+  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+    {content.replace(/<br\s*\/?>/gi, "  \n")}
+  </ReactMarkdown>
+);
 
 // Dev: hit backend directly | Prod: use env URL or nginx proxy
 const API_BASE = import.meta.env.DEV
@@ -82,6 +91,7 @@ export default function Chat() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('userId', getUserId());
 
       const res = await fetch(`${API_BASE}/api/upload`, {
         method: "POST",
@@ -91,7 +101,7 @@ export default function Chat() {
       const data = await res.json();
 
       if (res.ok) {
-        setUploadedSources(prev => [...prev, { name: file.name, type: isImage ? 'image' : 'file', chunks: data.chunks }]);
+        setUploadedSources([{ name: file.name, type: isImage ? 'image' : 'file', chunks: data.chunks }]);
         setMessages(prev => [...prev, {
           role: "assistant",
           content: isImage
@@ -143,14 +153,14 @@ export default function Chat() {
       const res = await fetch(`${API_BASE}/api/upload-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, userId: getUserId() })
       });
 
       const data = await res.json();
 
       if (res.ok) {
         const displayName = url.length > 50 ? url.slice(0, 50) + '...' : url;
-        setUploadedSources(prev => [...prev, { name: displayName, type: 'website', chunks: data.chunks }]);
+        setUploadedSources([{ name: displayName, type: 'website', chunks: data.chunks }]);
         setMessages(prev => [...prev, {
           role: "assistant",
           content: `Got it! You can now ask me anything about this website.`
@@ -199,36 +209,23 @@ export default function Chat() {
       }
 
       const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
+      const result = await readChatStream(reader, chunk => {
+        setStreamingMessage(prev => prev + chunk);
+      });
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        let chunk = decoder.decode(value, { stream: true });
-
-        // Strip end markers
-        if (chunk.includes("[DONE]")) {
-          chunk = chunk.replace("[DONE]", "");
-        }
-        if (chunk.includes("[ERROR]")) {
-          chunk = chunk.replace("[ERROR]", "");
-          break;
-        }
-
-        if (chunk) {
-          fullText += chunk;
-          setStreamingMessage(prev => prev + chunk);
-        }
-      }
-
-      if (fullText.trim()) {
-        setMessages(prev => [...prev, { role: "assistant", content: fullText }]);
+      if (result.text.trim() || result.error) {
+        const content = result.error
+          ? `${result.text.trim() ? `${result.text.trim()}\n\n` : ""}❌ ${result.error}`
+          : result.text;
+        setMessages(prev => [...prev, { role: "assistant", content }]);
       }
     } catch (err) {
       if (err.name !== "AbortError") {
         console.error("Streaming error:", err);
-        setMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `❌ ${err.message || "Something went wrong. Please try again."}`
+        }]);
       }
     } finally {
       setStreamingMessage("");
@@ -323,7 +320,7 @@ export default function Chat() {
                 {msg.role === 'assistant' ? '⚡' : '👤'}
               </div>
               <div className="message-content">
-                {msg.content}
+                {msg.role === "assistant" ? renderAssistantMarkdown(msg.content) : msg.content}
               </div>
             </div>
           ))}
@@ -332,7 +329,7 @@ export default function Chat() {
             <div className="message-wrapper assistant">
               <div className="avatar">⚡</div>
               <div className="message-content streaming">
-                {streamingMessage}
+                {renderAssistantMarkdown(streamingMessage)}
                 <span className="cursor">▌</span>
               </div>
             </div>

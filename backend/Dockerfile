@@ -9,8 +9,8 @@ WORKDIR /app
 # Copy dependency files
 COPY package.json package-lock.json* ./
 
-# Install dependencies (npm install is more forgiving than npm ci)
-RUN npm install --omit=dev
+# Install the exact production dependency tree from the lockfile
+RUN npm ci --omit=dev
 
 # Copy application code
 COPY server.js ./

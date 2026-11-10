@@ -16,6 +16,7 @@ A full-stack AI chatbot that lets you upload documents, images, and websites —
 - 🌐 **Website indexing** — paste any URL and ask questions about the page
 - ⚡ **Real-time streaming** — responses appear word-by-word like ChatGPT
 - 🧠 **Hybrid RAG + General AI** — uses document context when relevant, answers freely otherwise
+- 📝 **Readable answers** — assistant responses render Markdown, including tables and lists
 - 🌙☀️ **Dark / Light mode** — persisted in localStorage
 - 🐳 **Docker ready** — one command to run the full stack
 - ☁️ **Deployable to Render** — frontend as Static Site, backend as Docker Web Service
@@ -66,9 +67,9 @@ A full-stack AI chatbot that lets you upload documents, images, and websites —
 |---|---|
 | Frontend | React 19, Vite 7 |
 | Backend | Node.js 22, Express |
-| LLM | Groq API — LLaMA 3.1 8B Instant |
+| LLM | Groq API — OpenAI GPT-OSS 20B (`openai/gpt-oss-20b` by default) |
 | Vision AI | Groq — LLaMA 4 Scout (image extraction) |
-| Embeddings | Google Gemini (`text-embedding-004`) |
+| Embeddings | Google Gemini (`gemini-embedding-001`, 3072 dimensions) |
 | Vector DB | Pinecone (serverless, cosine similarity) |
 | Web Scraping | Cheerio |
 | PDF Parsing | pdf-parse |
@@ -80,7 +81,7 @@ A full-stack AI chatbot that lets you upload documents, images, and websites —
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22.12+
 - API keys for: [Groq](https://console.groq.com), [Pinecone](https://app.pinecone.io), [Google Gemini](https://aistudio.google.com)
 
 ### 1. Clone the repo
@@ -94,13 +95,15 @@ cd Genai_practice
 
 ```bash
 cd backend
-npm install
+npm ci
 ```
 
-Create `backend/.env`:
+Copy `backend/.env.example` to `backend/.env` and replace the placeholders with
+your API keys:
 
 ```env
 GROQ_API_KEY=your_groq_key
+GROQ_CHAT_MODEL=openai/gpt-oss-20b
 GEMINI_API_KEY=your_gemini_key
 PINECONE_API_KEY=your_pinecone_key
 PINECONE_INDEX=rag-docs
@@ -110,8 +113,21 @@ PINECONE_INDEX=rag-docs
 
 ```bash
 cd ../chatbot
-npm install
+npm ci
 ```
+
+Run the backend unit tests with `npm test` from the `backend` directory.
+Run the frontend stream-parser tests with `npm test` from the `chatbot` directory.
+
+Uploaded file and website chunks are tagged with the browser-generated user ID
+and retrieval is filtered by that ID. This is not authentication: users can
+change or copy the ID, so do not treat it as a security boundary for private
+data. Content indexed before user scoping was added has no owner tag and must be
+re-uploaded to be retrievable.
+
+Website indexing only fetches public HTTPS pages. Private/reserved IP addresses,
+non-HTTPS URLs, unsafe redirects, non-HTML responses, and responses larger than
+2 MB are rejected.
 
 ### 4. Run locally
 
@@ -202,6 +218,7 @@ Genai_practice/
 | Variable | Description |
 |---|---|
 | `GROQ_API_KEY` | Groq API key for LLM + vision |
+| `GROQ_CHAT_MODEL` | *(Optional)* Groq chat/tool model (default: `openai/gpt-oss-20b`) |
 | `GEMINI_API_KEY` | Google Gemini for embeddings |
 | `PINECONE_API_KEY` | Pinecone vector database |
 | `PINECONE_INDEX` | Index name (default: `rag-docs`) |
@@ -224,11 +241,13 @@ Genai_practice/
 
 ## 🔑 Key Design Decisions
 
+- **One active source per browser ID:** each successful file or website upload replaces that browser ID's previously indexed source, so retrieval cannot mix in older documents
 - **Relevance threshold (0.55):** Pinecone scores below this are ignored — the LLM answers from its own knowledge instead of forcing irrelevant context
 - **Short message bypass:** Messages under 10 characters (greetings etc.) skip Pinecone entirely
 - **Token management:** Conversation history is trimmed to last 4 turns + 6000 token ceiling — keeps API costs low
 - **Overlap chunking:** 500-word chunks with 50-word overlap prevent answers from being missed at chunk boundaries
-- **Same embedding model:** Both documents and questions use Gemini `text-embedding-004` — ensures vectors are in the same semantic space for valid cosine comparison
+- **Same embedding model:** Both documents and questions use Gemini `gemini-embedding-001` (3072 dimensions), matching the Pinecone index configuration
+- **Reliable document embeddings:** Gemini embedding requests are sent in bounded batches under a shared 80-requests-per-minute limiter and validated before Pinecone upserts, so free-tier rate limits and failed API batches cannot become empty vectors
 
 ---
 
