@@ -16,8 +16,8 @@ import {
     validateEmbeddingDimension,
     validatePineconeDimension,
 } from '../services/embeddingConfig.js'
-import { GROQ_CHAT_MODEL } from '../services/groqConfig.js'
-import { getPublicChatError } from '../services/chatErrors.js'
+import { GROQ_CHAT_MODEL, GROQ_VISION_MODEL } from '../services/groqConfig.js'
+import { getPublicChatError, getPublicVisionError } from '../services/chatErrors.js'
 
 const firstUserId = 'c4a0bfa1-09ee-4b14-a09d-a65cb70f2d85'
 const secondUserId = '73d584ab-3f9f-45bc-9dc8-8303814a0cf8'
@@ -164,6 +164,20 @@ test('propagates Gemini batch errors rather than converting them to empty vector
 
 test('uses the active Groq replacement model by default', () => {
     assert.equal(GROQ_CHAT_MODEL, 'openai/gpt-oss-20b')
+})
+
+test('uses a current Groq vision model by default', () => {
+    assert.equal(GROQ_VISION_MODEL, 'qwen/qwen3.8-27b')
+})
+
+test('explains unavailable Groq vision model errors', () => {
+    const message = getPublicVisionError({
+        status: 404,
+        error: { error: { code: 'model_not_found' } },
+    })
+
+    assert.match(message, /qwen\/qwen3\.8-27b/)
+    assert.match(message, /GROQ_VISION_MODEL/)
 })
 
 test('explains unavailable Groq model errors without exposing provider internals', () => {

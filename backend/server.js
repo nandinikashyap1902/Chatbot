@@ -25,8 +25,8 @@ import {
     userScopedMetadata,
 } from './services/userScope.js'
 import { loadWebsite, WebsiteUrlError } from './services/websiteFetcher.js'
-import { GROQ_CHAT_MODEL } from './services/groqConfig.js'
-import { getPublicChatError } from './services/chatErrors.js'
+import { GROQ_CHAT_MODEL, GROQ_VISION_MODEL } from './services/groqConfig.js'
+import { getPublicChatError, getPublicVisionError } from './services/chatErrors.js'
 import {
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
@@ -153,7 +153,7 @@ async function extractTextFromImage(filePath, ext) {
     const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
 
     const response = await groqClient.chat.completions.create({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        model: GROQ_VISION_MODEL,
         messages: [{
             role: 'user',
             content: [
@@ -276,6 +276,13 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     } catch (err) {
         if (req.file?.path) try { fs.unlinkSync(req.file.path) } catch (_) { }
         console.error('Upload error:', err)
+        if (
+            err?.code === 'model_not_found'
+            || err?.error?.code === 'model_not_found'
+            || err?.error?.error?.code === 'model_not_found'
+        ) {
+            return res.status(500).json({ error: getPublicVisionError(err) })
+        }
         res.status(err.status === 429 ? 429 : 500).json({ error: getPublicEmbeddingError(err) })
     }
 })

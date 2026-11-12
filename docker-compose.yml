@@ -1,31 +1,14 @@
 services:
-  # ---- Backend API ----
-  backend:
-    build: ./backend
-    container_name: rag-backend
+  app:
+    build: ./chatbot
+    container_name: rag-nextjs
     ports:
-      - "6001:6001"
+      - "3000:3000"
     env_file:
       - ./backend/.env
-    volumes:
-      - backend-uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6001/"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
-
-  # ---- Frontend (nginx) ----
-  frontend:
-    build: ./chatbot
-    container_name: rag-frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-
-volumes:
-  backend-uploads:

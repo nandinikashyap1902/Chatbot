@@ -1,7 +1,8 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import "../styles/chat.css";
 import { readChatStream } from "../utils/chatStream";
 
 const renderAssistantMarkdown = (content) => (
@@ -9,11 +10,6 @@ const renderAssistantMarkdown = (content) => (
     {content.replace(/<br\s*\/?>/gi, "  \n")}
   </ReactMarkdown>
 );
-
-// Dev: hit backend directly | Prod: use env URL or nginx proxy
-const API_BASE = import.meta.env.DEV
-  ? "http://localhost:6001"
-  : (import.meta.env.VITE_API_URL || "");
 
 const getUserId = () => {
   let userId = localStorage.getItem("userId");
@@ -37,7 +33,12 @@ export default function Chat() {
   const [uploadedSources, setUploadedSources] = useState([]);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState('');
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+  const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) setTheme(savedTheme);
+  }, []);
 
   // Apply theme to <html> element
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function Chat() {
       formData.append('file', file);
       formData.append('userId', getUserId());
 
-      const res = await fetch(`${API_BASE}/api/upload`, {
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData
       });
@@ -150,7 +151,7 @@ export default function Chat() {
     }]);
 
     try {
-      const res = await fetch(`${API_BASE}/api/upload-url`, {
+      const res = await fetch("/api/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, userId: getUserId() })
@@ -196,7 +197,7 @@ export default function Chat() {
     setStreamingMessage("");
 
     try {
-      const res = await fetch(`${API_BASE}/api/groq/stream`, {
+      const res = await fetch("/api/groq/stream", {
         method: "POST",
         body: JSON.stringify({ message: userMessage.content, userId: getUserId() }),
         headers: { "Content-Type": "application/json" },
